@@ -430,13 +430,13 @@ export default function FlappyEtkaBreakfast() {
                 }}>
                     {isGameOver ? (
                         <>
-                            <h2 style={{ color: '#ffab91', fontSize: '48px', margin: 0, textShadow: '2px 2px #000' }}>TOST OLDUN!</h2>
+                            <h2 style={{ color: '#ffab91', fontSize: '48px', margin: 0, textShadow: '2px 2px #000' }}>saclarini kes etiqa!</h2>
                             <p style={{ fontSize: '24px', marginTop: '10px' }}>Toplanan: {score} gr</p>
                             <p style={{ color: '#ffe082', fontSize: '16px' }}>En Çok: {highScore} gr</p>
                         </>
                     ) : (
                         <>
-                            <h2 style={{ color: '#fff59d', fontSize: '36px', margin: '0 0 10px 0', textShadow: '3px 3px 0 #000', textAlign:'center' }}>KAHVALTI ZAMANI</h2>
+                            <h2 style={{ color: '#fff59d', fontSize: '36px', margin: '0 0 10px 0', textShadow: '3px 3px 0 #000', textAlign:'center' }}>etka saclarini kes</h2>
                             <p style={{fontSize: '16px', opacity: 0.9}}>Ekmeklere değme!</p>
                         </>
                     )}
