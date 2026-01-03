@@ -36,16 +36,16 @@ interface Cloud {
 }
 
 export default function FlappyEtkaFixed() {
-  // --- STATE (Sadece Görüntü/UI için) ---
+  // --- STATE (UI) ---
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
-  const [showMenu, setShowMenu] = useState(true); // Menü kontrolü
+  const [showMenu, setShowMenu] = useState(true);
   const [isGameOver, setIsGameOver] = useState(false);
 
-  // --- REFS (Oyun Motoru için - Anlık Veri) ---
+  // --- REFS (Oyun Motoru) ---
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const requestRef = useRef<number | null>(null);
-  const gameStateRef = useRef<'START' | 'PLAYING' | 'GAMEOVER'>('START'); // State yerine Ref kullanıyoruz!
+  const gameStateRef = useRef<'START' | 'PLAYING' | 'GAMEOVER'>('START');
 
   // Oyun Objeleri
   const bird = useRef<Bird>({ x: 50, y: 150, velocity: 0, width: 34, height: 28, rotation: 0 });
@@ -66,11 +66,9 @@ export default function FlappyEtkaFixed() {
   const SCREEN_WIDTH = 360;
   const SCREEN_HEIGHT = 600;
 
-  // --- GÜVENLİ SES MOTORU ---
+  // --- SES MOTORU ---
   const playSound = useCallback((type: 'jump' | 'score' | 'hit') => {
-    // Tarayıcıda çalışmıyorsa veya hata verirse oyunu bozma
     if (typeof window === 'undefined') return;
-    
     try {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContext) return;
@@ -106,10 +104,7 @@ export default function FlappyEtkaFixed() {
         osc.start(now);
         osc.stop(now + 0.3);
       }
-    } catch (e) {
-      // Ses hatası olursa yoksay
-      console.log("Ses çalınamadı");
-    }
+    } catch (e) { console.log("Ses hatası"); }
   }, []);
 
   // --- BAŞLANGIÇ ---
@@ -117,13 +112,9 @@ export default function FlappyEtkaFixed() {
     const saved = localStorage.getItem('flappyHighScore');
     if (saved) setHighScore(parseInt(saved));
 
-    // İlk bulutları oluştur
     for(let i=0; i<5; i++) clouds.current.push(createCloud(true));
     
-    // Döngüyü başlat (Sadece çizim yapar, oyun başlamaz)
-    if (!requestRef.current) {
-        requestRef.current = requestAnimationFrame(loop);
-    }
+    if (!requestRef.current) requestRef.current = requestAnimationFrame(loop);
 
     return () => {
         if (requestRef.current) cancelAnimationFrame(requestRef.current);
@@ -148,26 +139,18 @@ export default function FlappyEtkaFixed() {
     setScore(0);
     setIsGameOver(false);
     setShowMenu(false);
-    
-    // Kritik Düzeltme: State yerine Ref güncelliyoruz
     gameStateRef.current = 'PLAYING';
     
-    // Döngü durmuşsa yeniden başlat
-    if (!requestRef.current) {
-        loop();
-    }
-    
-    jump(); // Başlar başlamaz zıpla
+    if (!requestRef.current) loop();
+    jump();
   };
 
   const jump = () => {
     if (gameStateRef.current !== 'PLAYING') return;
-    
     bird.current.velocity = -JUMP_STRENGTH;
     bird.current.rotation = -25 * Math.PI / 180;
     playSound('jump');
     
-    // Toz efekti
     for (let i = 0; i < 5; i++) {
         particles.current.push({
             x: bird.current.x,
@@ -181,24 +164,16 @@ export default function FlappyEtkaFixed() {
     }
   };
 
-  // --- OYUN DÖNGÜSÜ (ANA MOTOR) ---
+  // --- OYUN DÖNGÜSÜ ---
   const loop = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext('2d');
 
     if (canvas && ctx) {
-        // Fizik güncelleme (Sadece oyun oynanıyorsa)
-        if (gameStateRef.current === 'PLAYING') {
-            update(canvas);
-        } else {
-            // Arkaplan animasyonu (oyun dursa bile bulutlar aksın)
-            updateBackground();
-        }
-        
-        // Çizim (Her zaman)
+        if (gameStateRef.current === 'PLAYING') update(canvas);
+        else updateBackground();
         draw(ctx);
     }
-
     requestRef.current = requestAnimationFrame(loop);
   };
 
@@ -212,19 +187,14 @@ export default function FlappyEtkaFixed() {
     frames.current++;
     const speed = BASE_SPEED + (scoreRef.current * 0.05);
 
-    // 1. Kuş
+    // Kuş
     bird.current.velocity += GRAVITY;
     bird.current.y += bird.current.velocity;
-    if (bird.current.velocity > 0) {
-        bird.current.rotation = Math.min(bird.current.rotation + 0.05, 1.5);
-    }
+    if (bird.current.velocity > 0) bird.current.rotation = Math.min(bird.current.rotation + 0.05, 1.5);
 
-    // Zemin Çarpması
-    if (bird.current.y + bird.current.height >= SCREEN_HEIGHT - 20) {
-        handleGameOver();
-    }
+    if (bird.current.y + bird.current.height >= SCREEN_HEIGHT - 20) handleGameOver();
 
-    // 2. Borular
+    // Borular
     if (frames.current % Math.floor(120 / (1 + scoreRef.current * 0.05)) === 0) {
         const pipeY = Math.random() * (SCREEN_HEIGHT - PIPE_GAP - 100) + 50;
         pipes.current.push({ x: SCREEN_WIDTH, y: pipeY, passed: false });
@@ -234,16 +204,12 @@ export default function FlappyEtkaFixed() {
         let p = pipes.current[i];
         p.x -= speed;
 
-        // Çarpışma
         if (
             bird.current.x + bird.current.width > p.x &&
             bird.current.x < p.x + PIPE_WIDTH &&
             (bird.current.y < p.y || bird.current.y + bird.current.height > p.y + PIPE_GAP)
-        ) {
-            handleGameOver();
-        }
+        ) handleGameOver();
 
-        // Skor
         if (p.x + PIPE_WIDTH < bird.current.x && !p.passed) {
             scoreRef.current++;
             setScore(scoreRef.current);
@@ -256,10 +222,8 @@ export default function FlappyEtkaFixed() {
             i--;
         }
     }
-
     updateBackground();
     
-    // 3. Partiküller
     for (let i = 0; i < particles.current.length; i++) {
         let pt = particles.current[i];
         pt.x += pt.vx;
@@ -271,24 +235,19 @@ export default function FlappyEtkaFixed() {
 
   const handleGameOver = () => {
     if (gameStateRef.current === 'GAMEOVER') return;
-    
     gameStateRef.current = 'GAMEOVER';
     setIsGameOver(true);
     playSound('hit');
-    
     if (scoreRef.current > highScore) {
         setHighScore(scoreRef.current);
         localStorage.setItem('flappyHighScore', scoreRef.current.toString());
     }
   };
 
-  // --- ÇİZİM ---
   const draw = (ctx: CanvasRenderingContext2D) => {
-    // Arkaplan
     ctx.fillStyle = '#70c5ce';
     ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    // Bulutlar
     ctx.fillStyle = 'rgba(255,255,255,0.8)';
     clouds.current.forEach(c => {
         ctx.beginPath();
@@ -296,48 +255,40 @@ export default function FlappyEtkaFixed() {
         ctx.fill();
     });
 
-    // Borular
     pipes.current.forEach(p => {
         const grad = ctx.createLinearGradient(p.x, 0, p.x + PIPE_WIDTH, 0);
         grad.addColorStop(0, '#43a047');
         grad.addColorStop(0.5, '#66bb6a');
         grad.addColorStop(1, '#2e7d32');
         ctx.fillStyle = grad;
-        
-        ctx.fillRect(p.x, 0, PIPE_WIDTH, p.y); // Üst
-        ctx.fillRect(p.x - 2, p.y - 20, PIPE_WIDTH + 4, 20); // Üst Başlık
-        
-        ctx.fillRect(p.x, p.y + PIPE_GAP, PIPE_WIDTH, SCREEN_HEIGHT); // Alt
-        ctx.fillRect(p.x - 2, p.y + PIPE_GAP, PIPE_WIDTH + 4, 20); // Alt Başlık
+        ctx.fillRect(p.x, 0, PIPE_WIDTH, p.y);
+        ctx.fillRect(p.x - 2, p.y - 20, PIPE_WIDTH + 4, 20);
+        ctx.fillRect(p.x, p.y + PIPE_GAP, PIPE_WIDTH, SCREEN_HEIGHT);
+        ctx.fillRect(p.x - 2, p.y + PIPE_GAP, PIPE_WIDTH + 4, 20);
     });
 
-    // Zemin
     ctx.fillStyle = '#d84315';
     ctx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20);
     ctx.fillStyle = '#4caf50';
     ctx.fillRect(0, SCREEN_HEIGHT - 25, SCREEN_WIDTH, 5);
 
-    // Kuş
-    if (gameStateRef.current !== 'GAMEOVER' || frames.current % 10 < 5) { // Yanınca yanıp sönme
+    if (gameStateRef.current !== 'GAMEOVER' || frames.current % 10 < 5) {
         ctx.save();
         ctx.translate(bird.current.x + bird.current.width/2, bird.current.y + bird.current.height/2);
         ctx.rotate(bird.current.rotation);
         
-        ctx.fillStyle = '#fdd835'; // Sarı gövde
+        ctx.fillStyle = '#fdd835';
         ctx.fillRect(-bird.current.width/2, -bird.current.height/2, bird.current.width, bird.current.height);
         
-        ctx.fillStyle = '#fff'; // Göz
+        ctx.fillStyle = '#fff';
         ctx.fillRect(6, -10, 10, 10);
-        ctx.fillStyle = '#000'; // Göz bebeği
+        ctx.fillStyle = '#000';
         ctx.fillRect(12, -8, 4, 4);
-        
-        ctx.fillStyle = '#f57c00'; // Gaga
+        ctx.fillStyle = '#f57c00';
         ctx.fillRect(10, 2, 12, 8);
-        
         ctx.restore();
     }
 
-    // Partiküller
     particles.current.forEach(pt => {
         ctx.fillStyle = pt.color;
         ctx.globalAlpha = pt.life;
@@ -351,11 +302,8 @@ export default function FlappyEtkaFixed() {
     const handler = (e: KeyboardEvent) => {
         if (e.code === 'Space' || e.code === 'ArrowUp') {
             e.preventDefault();
-            if (gameStateRef.current === 'START' || gameStateRef.current === 'GAMEOVER') {
-                resetGame();
-            } else {
-                jump();
-            }
+            if (gameStateRef.current === 'START' || gameStateRef.current === 'GAMEOVER') resetGame();
+            else jump();
         }
     };
     window.addEventListener('keydown', handler);
@@ -365,15 +313,29 @@ export default function FlappyEtkaFixed() {
   return (
     <div style={{
         display: 'flex', 
+        flexDirection: 'column', // Başlığı üste almak için column yaptık
         justifyContent: 'center', 
         alignItems: 'center', 
         height: '100vh', 
         backgroundColor: '#222',
-        fontFamily: 'sans-serif'
+        fontFamily: "'Courier New', Courier, monospace", // Retro font
+        touchAction: 'none'
     }}>
+        {/* --- 1. ANA BAŞLIK BURADA --- */}
+        <h1 style={{
+            color: '#fdd835',
+            fontSize: '48px',
+            marginBottom: '20px',
+            textShadow: '4px 4px 0 #d84315, -2px -2px 0 #000',
+            letterSpacing: '5px',
+            fontWeight: '900',
+            textAlign: 'center'
+        }}>
+            FLAPPY ETKA
+        </h1>
+
         <div style={{ position: 'relative', width: SCREEN_WIDTH, height: SCREEN_HEIGHT, overflow: 'hidden', boxShadow: '0 0 50px rgba(0,0,0,0.5)', borderRadius: '10px' }}>
             
-            {/* OYUN ALANI */}
             <canvas 
                 ref={canvasRef} 
                 width={SCREEN_WIDTH} 
@@ -385,12 +347,10 @@ export default function FlappyEtkaFixed() {
                 style={{ display: 'block' }}
             />
 
-            {/* SKOR */}
             <div style={{ position: 'absolute', top: 20, width: '100%', textAlign: 'center', pointerEvents: 'none' }}>
                 <span style={{ fontSize: '50px', fontWeight: 'bold', color: 'white', textShadow: '2px 2px 0 #000' }}>{score}</span>
             </div>
 
-            {/* MENÜLER */}
             {(showMenu || isGameOver) && (
                 <div style={{
                     position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
@@ -400,14 +360,15 @@ export default function FlappyEtkaFixed() {
                 }}>
                     {isGameOver ? (
                         <>
-                            <h1 style={{ color: '#ff5252', fontSize: '48px', margin: 0 }}>YANDIN!</h1>
+                            <h2 style={{ color: '#ff5252', fontSize: '48px', margin: 0, textShadow: '2px 2px #000' }}>YANDIN!</h2>
                             <p style={{ fontSize: '24px' }}>Skor: {score}</p>
                             <p style={{ color: '#ffd600' }}>En Yüksek: {highScore}</p>
                         </>
                     ) : (
                         <>
-                            <h1 style={{ color: '#ffd600', fontSize: '40px', margin: 0 }}>FLAPPY ETKA</h1>
-                            <p>Başlamak için tıkla</p>
+                             {/* --- 2. MENÜ BAŞLIĞI BURADA --- */}
+                            <h2 style={{ color: '#ffd600', fontSize: '40px', margin: '0 0 10px 0', textShadow: '3px 3px 0 #000' }}>FLAPPY ETKA</h2>
+                            <p style={{fontSize: '18px', opacity: 0.8}}>Başlamak için tıkla</p>
                         </>
                     )}
                     
@@ -416,7 +377,7 @@ export default function FlappyEtkaFixed() {
                         style={{
                             marginTop: '20px', padding: '15px 40px', fontSize: '20px', fontWeight: 'bold',
                             backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '30px',
-                            cursor: 'pointer', boxShadow: '0 4px 0 #2e7d32'
+                            cursor: 'pointer', boxShadow: '0 4px 0 #2e7d32', transition: 'transform 0.1s'
                         }}
                     >
                         {isGameOver ? 'TEKRAR OYNA' : 'BAŞLA'}
@@ -424,6 +385,9 @@ export default function FlappyEtkaFixed() {
                 </div>
             )}
         </div>
+        
+        {/* Alt bilgi */}
+        <p style={{color: '#666', marginTop: '10px', fontSize: '12px'}}>v2.1 • Etka Edition</p>
     </div>
   );
 }
