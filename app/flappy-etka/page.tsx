@@ -3,8 +3,6 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 
 // --- TİP TANIMLAMALARI ---
-
-// Kuş (Etka) Objesi
 interface Bird {
   x: number;
   y: number;
@@ -12,28 +10,24 @@ interface Bird {
   width: number;
   height: number;
   rotation: number;
-  color: string;
 }
 
-// Boru Objesi
 interface Pipe {
   x: number;
-  y: number; // Üst borunun bitiş noktası
-  passed: boolean; // Skor alındı mı?
+  y: number;
+  passed: boolean;
 }
 
-// Partikül (Efektler için)
 interface Particle {
   x: number;
   y: number;
   vx: number;
   vy: number;
-  life: number; // Ömür (0-1 arası)
+  life: number;
   color: string;
   size: number;
 }
 
-// Bulut (Arkaplan)
 interface Cloud {
   x: number;
   y: number;
@@ -41,43 +35,42 @@ interface Cloud {
   size: number;
 }
 
-export default function FlappyEtkaUltimate() {
-  // --- STATE YÖNETİMİ (UI) ---
+export default function FlappyEtkaFixed() {
+  // --- STATE (Sadece Görüntü/UI için) ---
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
-  const [gameState, setGameState] = useState<'START' | 'PLAYING' | 'GAMEOVER'>('START');
-  const [flash, setFlash] = useState(false); // Skor alınca ekran parlaması
+  const [showMenu, setShowMenu] = useState(true); // Menü kontrolü
+  const [isGameOver, setIsGameOver] = useState(false);
 
-  // --- REF YÖNETİMİ (OYUN MOTORU) ---
+  // --- REFS (Oyun Motoru için - Anlık Veri) ---
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  // HATA DÜZELTME: Başlangıç değeri null verildi
   const requestRef = useRef<number | null>(null);
-  
-  // Oyun Verileri
-  const bird = useRef<Bird>({ 
-    x: 50, y: 150, velocity: 0, width: 34, height: 28, rotation: 0, color: '#f1c40f' 
-  });
+  const gameStateRef = useRef<'START' | 'PLAYING' | 'GAMEOVER'>('START'); // State yerine Ref kullanıyoruz!
+
+  // Oyun Objeleri
+  const bird = useRef<Bird>({ x: 50, y: 150, velocity: 0, width: 34, height: 28, rotation: 0 });
   const pipes = useRef<Pipe[]>([]);
   const particles = useRef<Particle[]>([]);
   const clouds = useRef<Cloud[]>([]);
   
-  // Sayaçlar ve Zorluk
+  // Değişkenler
   const frames = useRef(0);
   const scoreRef = useRef(0);
-  const difficultyMultiplier = useRef(1); // Oyun hızlandıkça artar
 
-  // --- SABİTLER ---
+  // --- AYARLAR ---
   const GRAVITY = 0.25;
   const JUMP_STRENGTH = 4.6;
   const PIPE_WIDTH = 52;
-  const PIPE_GAP = 140; // Boru aralığı
+  const PIPE_GAP = 140;
   const BASE_SPEED = 2.2;
-  const SCREEN_WIDTH = 360; // Canvas genişliği
-  const SCREEN_HEIGHT = 600; // Canvas yüksekliği
+  const SCREEN_WIDTH = 360;
+  const SCREEN_HEIGHT = 600;
 
-  // --- SES MOTORU (Web Audio API) ---
-  // Dosya yüklemeye gerek kalmadan ses üretir
+  // --- GÜVENLİ SES MOTORU ---
   const playSound = useCallback((type: 'jump' | 'score' | 'hit') => {
+    // Tarayıcıda çalışmıyorsa veya hata verirse oyunu bozma
+    if (typeof window === 'undefined') return;
+    
     try {
       const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
       if (!AudioContext) return;
@@ -92,528 +85,345 @@ export default function FlappyEtkaUltimate() {
       const now = ctx.currentTime;
 
       if (type === 'jump') {
-        osc.type = 'sine';
         osc.frequency.setValueAtTime(400, now);
         osc.frequency.exponentialRampToValueAtTime(600, now + 0.1);
-        gain.gain.setValueAtTime(0.3, now);
+        gain.gain.setValueAtTime(0.1, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
         osc.start(now);
         osc.stop(now + 0.1);
       } else if (type === 'score') {
         osc.type = 'square';
         osc.frequency.setValueAtTime(800, now);
-        osc.frequency.setValueAtTime(1200, now + 0.05);
-        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.setValueAtTime(0.05, now);
         gain.gain.linearRampToValueAtTime(0.01, now + 0.1);
         osc.start(now);
         osc.stop(now + 0.1);
       } else if (type === 'hit') {
         osc.type = 'sawtooth';
         osc.frequency.setValueAtTime(150, now);
-        osc.frequency.exponentialRampToValueAtTime(50, now + 0.3);
-        gain.gain.setValueAtTime(0.5, now);
+        gain.gain.setValueAtTime(0.2, now);
         gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
         osc.start(now);
         osc.stop(now + 0.3);
       }
     } catch (e) {
-      console.error("Ses hatası:", e);
+      // Ses hatası olursa yoksay
+      console.log("Ses çalınamadı");
     }
   }, []);
 
-  // --- BAŞLANGIÇ AYARLARI ---
+  // --- BAŞLANGIÇ ---
   useEffect(() => {
-    // LocalStorage'dan en yüksek skoru çek
-    const savedScore = localStorage.getItem('flappyEtkaHighScore');
-    if (savedScore) {
-      setHighScore(parseInt(savedScore));
+    const saved = localStorage.getItem('flappyHighScore');
+    if (saved) setHighScore(parseInt(saved));
+
+    // İlk bulutları oluştur
+    for(let i=0; i<5; i++) clouds.current.push(createCloud(true));
+    
+    // Döngüyü başlat (Sadece çizim yapar, oyun başlamaz)
+    if (!requestRef.current) {
+        requestRef.current = requestAnimationFrame(loop);
     }
 
-    // Başlangıç bulutlarını oluştur
-    for(let i=0; i<5; i++) {
-        clouds.current.push(createCloud(true));
-    }
+    return () => {
+        if (requestRef.current) cancelAnimationFrame(requestRef.current);
+    };
   }, []);
 
   // --- YARDIMCI FONKSİYONLAR ---
+  const createCloud = (randomX = false): Cloud => ({
+    x: randomX ? Math.random() * SCREEN_WIDTH : SCREEN_WIDTH + 50,
+    y: Math.random() * (SCREEN_HEIGHT / 2),
+    speed: 0.5 + Math.random() * 0.5,
+    size: 20 + Math.random() * 30
+  });
 
-  // Rastgele Bulut Üretici
-  const createCloud = (randomX: boolean = false): Cloud => {
-    return {
-        x: randomX ? Math.random() * SCREEN_WIDTH : SCREEN_WIDTH + 50,
-        y: Math.random() * (SCREEN_HEIGHT / 2),
-        speed: 0.5 + Math.random() * 0.5,
-        size: 20 + Math.random() * 30
-    };
-  };
-
-  // Patlama Efekti (Partikül Üretici)
-  const createExplosion = (x: number, y: number, color: string) => {
-    for (let i = 0; i < 20; i++) {
-      particles.current.push({
-        x: x,
-        y: y,
-        vx: (Math.random() - 0.5) * 8,
-        vy: (Math.random() - 0.5) * 8,
-        life: 1.0,
-        color: color,
-        size: Math.random() * 4 + 2
-      });
+  const resetGame = () => {
+    bird.current = { x: 60, y: SCREEN_HEIGHT / 2, velocity: 0, width: 34, height: 28, rotation: 0 };
+    pipes.current = [];
+    particles.current = [];
+    scoreRef.current = 0;
+    frames.current = 0;
+    
+    setScore(0);
+    setIsGameOver(false);
+    setShowMenu(false);
+    
+    // Kritik Düzeltme: State yerine Ref güncelliyoruz
+    gameStateRef.current = 'PLAYING';
+    
+    // Döngü durmuşsa yeniden başlat
+    if (!requestRef.current) {
+        loop();
     }
+    
+    jump(); // Başlar başlamaz zıpla
   };
 
-  // Zıplama Efekti (Toz)
-  const createJumpDust = (x: number, y: number) => {
+  const jump = () => {
+    if (gameStateRef.current !== 'PLAYING') return;
+    
+    bird.current.velocity = -JUMP_STRENGTH;
+    bird.current.rotation = -25 * Math.PI / 180;
+    playSound('jump');
+    
+    // Toz efekti
     for (let i = 0; i < 5; i++) {
         particles.current.push({
-            x: x,
-            y: y,
+            x: bird.current.x,
+            y: bird.current.y + bird.current.height,
             vx: (Math.random() - 0.5) * 2,
-            vy: Math.random() * 2, // Aşağı doğru
+            vy: Math.random() * 2,
             life: 0.8,
-            color: 'rgba(255, 255, 255, 0.6)',
+            color: 'rgba(255,255,255,0.6)',
             size: Math.random() * 3
         });
     }
   };
 
-  // Oyunu Sıfırla
-  const resetGame = () => {
-    bird.current = { x: 60, y: SCREEN_HEIGHT / 2, velocity: 0, width: 34, height: 28, rotation: 0, color: '#f1c40f' };
-    pipes.current = [];
-    particles.current = [];
-    scoreRef.current = 0;
-    frames.current = 0;
-    difficultyMultiplier.current = 1;
-    setScore(0);
-    setGameState('PLAYING');
-    
-    // Döngüyü başlat
-    if (!requestRef.current) {
-        loop(); 
-    }
-  };
-
-  // Zıplama Aksiyonu
-  const jump = useCallback(() => {
-    if (gameState === 'GAMEOVER') return;
-    if (gameState === 'START') {
-        resetGame();
-        return;
-    }
-
-    bird.current.velocity = -JUMP_STRENGTH;
-    bird.current.rotation = -25 * Math.PI / 180;
-    createJumpDust(bird.current.x, bird.current.y + bird.current.height);
-    playSound('jump');
-  }, [gameState, playSound]);
-
-  // --- OYUN DÖNGÜSÜ (LOOP) ---
+  // --- OYUN DÖNGÜSÜ (ANA MOTOR) ---
   const loop = () => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const ctx = canvas?.getContext('2d');
 
-    // Eğer oyun bitmediyse güncelle
-    if (gameState === 'PLAYING') {
-      updatePhysics();
+    if (canvas && ctx) {
+        // Fizik güncelleme (Sadece oyun oynanıyorsa)
+        if (gameStateRef.current === 'PLAYING') {
+            update(canvas);
+        } else {
+            // Arkaplan animasyonu (oyun dursa bile bulutlar aksın)
+            updateBackground();
+        }
+        
+        // Çizim (Her zaman)
+        draw(ctx);
     }
-    
-    // Her zaman çiz (Game Over olsa bile son kareyi görelim)
-    draw(ctx);
 
-    if (gameState === 'PLAYING') {
-      requestRef.current = requestAnimationFrame(loop);
-    } else {
-        requestRef.current = null; // Döngüyü durdur
-    }
+    requestRef.current = requestAnimationFrame(loop);
   };
 
-  // --- FİZİK MOTORU ---
-  const updatePhysics = () => {
-    frames.current++;
-    
-    // Zorluk Artışı: Her 5 puanda bir hız %5 artar
-    const speed = BASE_SPEED * (1 + Math.floor(scoreRef.current / 5) * 0.05);
+  const updateBackground = () => {
+     clouds.current.forEach(c => c.x -= c.speed);
+     clouds.current = clouds.current.filter(c => c.x + c.size > -50);
+     if (Math.random() < 0.01) clouds.current.push(createCloud());
+  };
 
-    // 1. KUŞ FİZİĞİ
+  const update = (canvas: HTMLCanvasElement) => {
+    frames.current++;
+    const speed = BASE_SPEED + (scoreRef.current * 0.05);
+
+    // 1. Kuş
     bird.current.velocity += GRAVITY;
     bird.current.y += bird.current.velocity;
-
-    // Dönüş (Rotation) hesaplama
-    if (bird.current.velocity > 0) { // Düşerken
-        bird.current.rotation += 3 * Math.PI / 180;
-        if (bird.current.rotation > 90 * Math.PI / 180) bird.current.rotation = 90 * Math.PI / 180;
+    if (bird.current.velocity > 0) {
+        bird.current.rotation = Math.min(bird.current.rotation + 0.05, 1.5);
     }
 
-    // Zemin ve Tavan Kontrolü
-    if (bird.current.y + bird.current.height >= SCREEN_HEIGHT - 20 || bird.current.y < 0) {
+    // Zemin Çarpması
+    if (bird.current.y + bird.current.height >= SCREEN_HEIGHT - 20) {
         handleGameOver();
     }
 
-    // 2. BORU YÖNETİMİ
-    // Boru ekleme sıklığı da hıza göre ayarlanır
-    const pipeInterval = Math.floor(120 / (1 + Math.floor(scoreRef.current / 10) * 0.1));
-    
-    if (frames.current % pipeInterval === 0) {
-        const minPipeY = 50;
-        const maxPipeY = SCREEN_HEIGHT - PIPE_GAP - 100;
-        const pipeY = Math.floor(Math.random() * (maxPipeY - minPipeY + 1)) + minPipeY;
-        
-        pipes.current.push({
-            x: SCREEN_WIDTH,
-            y: pipeY,
-            passed: false
-        });
+    // 2. Borular
+    if (frames.current % Math.floor(120 / (1 + scoreRef.current * 0.05)) === 0) {
+        const pipeY = Math.random() * (SCREEN_HEIGHT - PIPE_GAP - 100) + 50;
+        pipes.current.push({ x: SCREEN_WIDTH, y: pipeY, passed: false });
     }
 
     for (let i = 0; i < pipes.current.length; i++) {
         let p = pipes.current[i];
         p.x -= speed;
 
-        // Çarpışma Kontrolü (Hitbox biraz daha affedici yapıldı)
-        const birdHitbox = {
-            x: bird.current.x + 4,
-            y: bird.current.y + 4,
-            w: bird.current.width - 8,
-            h: bird.current.height - 8
-        };
-
-        // X ekseninde çakışma
-        if (birdHitbox.x + birdHitbox.w > p.x && birdHitbox.x < p.x + PIPE_WIDTH) {
-            // Y ekseninde çakışma (Üst boru veya Alt boru)
-            if (birdHitbox.y < p.y || birdHitbox.y + birdHitbox.h > p.y + PIPE_GAP) {
-                handleGameOver();
-            }
+        // Çarpışma
+        if (
+            bird.current.x + bird.current.width > p.x &&
+            bird.current.x < p.x + PIPE_WIDTH &&
+            (bird.current.y < p.y || bird.current.y + bird.current.height > p.y + PIPE_GAP)
+        ) {
+            handleGameOver();
         }
 
-        // Skor Alma
+        // Skor
         if (p.x + PIPE_WIDTH < bird.current.x && !p.passed) {
-            scoreRef.current += 1;
+            scoreRef.current++;
             setScore(scoreRef.current);
-            setFlash(true); // Flash efekti
-            setTimeout(() => setFlash(false), 100);
             playSound('score');
             p.passed = true;
         }
 
-        // Ekran dışına çıkanları sil
-        if (p.x + PIPE_WIDTH <= 0) {
+        if (p.x + PIPE_WIDTH < 0) {
             pipes.current.shift();
             i--;
         }
     }
 
-    // 3. BULUT FİZİĞİ (Parallax)
-    clouds.current.forEach(c => {
-        c.x -= c.speed;
-    });
-    // Ekrandan çıkan bulutları başa al
-    clouds.current = clouds.current.filter(c => c.x + c.size > -50);
-    if(frames.current % 100 === 0) {
-        clouds.current.push(createCloud());
-    }
-
-    // 4. PARTİKÜL FİZİĞİ
+    updateBackground();
+    
+    // 3. Partiküller
     for (let i = 0; i < particles.current.length; i++) {
         let pt = particles.current[i];
         pt.x += pt.vx;
         pt.y += pt.vy;
-        pt.vy += 0.1; // Partiküller de düşer
         pt.life -= 0.02;
-
-        if (pt.life <= 0) {
-            particles.current.splice(i, 1);
-            i--;
-        }
+        if(pt.life <= 0) { particles.current.splice(i, 1); i--; }
     }
   };
 
-  // --- OYUN BİTİŞİ ---
   const handleGameOver = () => {
-    if (gameState === 'GAMEOVER') return; // Zaten bittiyse tekrar tetikleme
+    if (gameStateRef.current === 'GAMEOVER') return;
     
-    setGameState('GAMEOVER');
+    gameStateRef.current = 'GAMEOVER';
+    setIsGameOver(true);
     playSound('hit');
-    createExplosion(bird.current.x, bird.current.y, '#e74c3c');
     
-    // Yüksek Skor Kaydı
     if (scoreRef.current > highScore) {
         setHighScore(scoreRef.current);
-        localStorage.setItem('flappyEtkaHighScore', scoreRef.current.toString());
+        localStorage.setItem('flappyHighScore', scoreRef.current.toString());
     }
   };
 
-  // --- ÇİZİM MOTORU (RENDER) ---
+  // --- ÇİZİM ---
   const draw = (ctx: CanvasRenderingContext2D) => {
-    // 1. Arkaplan (Günün saatine göre değişebilir - şimdilik sabit mavi)
-    // Skor arttıkça gökyüzü kararabilir
-    const skyColor = scoreRef.current > 10 ? '#2c3e50' : '#70c5ce';
-    ctx.fillStyle = skyColor;
+    // Arkaplan
+    ctx.fillStyle = '#70c5ce';
     ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
 
-    // 2. Bulutlar
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    // Bulutlar
+    ctx.fillStyle = 'rgba(255,255,255,0.8)';
     clouds.current.forEach(c => {
         ctx.beginPath();
         ctx.arc(c.x, c.y, c.size, 0, Math.PI * 2);
-        ctx.arc(c.x + c.size * 0.5, c.y - c.size * 0.2, c.size * 0.8, 0, Math.PI * 2);
-        ctx.arc(c.x - c.size * 0.5, c.y - c.size * 0.2, c.size * 0.8, 0, Math.PI * 2);
         ctx.fill();
     });
 
-    // 3. Borular
+    // Borular
     pipes.current.forEach(p => {
-        // Boru Gövdesi
-        const gradient = ctx.createLinearGradient(p.x, 0, p.x + PIPE_WIDTH, 0);
-        gradient.addColorStop(0, '#2ecc71');
-        gradient.addColorStop(0.5, '#5cdb95'); // Parlama
-        gradient.addColorStop(1, '#27ae60');
-
-        ctx.fillStyle = gradient;
+        const grad = ctx.createLinearGradient(p.x, 0, p.x + PIPE_WIDTH, 0);
+        grad.addColorStop(0, '#43a047');
+        grad.addColorStop(0.5, '#66bb6a');
+        grad.addColorStop(1, '#2e7d32');
+        ctx.fillStyle = grad;
         
-        // Üst Boru
-        ctx.fillRect(p.x, 0, PIPE_WIDTH, p.y);
-        // Boru Kafası (Üst)
-        ctx.fillStyle = '#27ae60';
-        ctx.fillRect(p.x - 2, p.y - 20, PIPE_WIDTH + 4, 20);
-
-        // Alt Boru
-        ctx.fillStyle = gradient;
-        ctx.fillRect(p.x, p.y + PIPE_GAP, PIPE_WIDTH, SCREEN_HEIGHT - (p.y + PIPE_GAP));
-        // Boru Kafası (Alt)
-        ctx.fillStyle = '#27ae60';
-        ctx.fillRect(p.x - 2, p.y + PIPE_GAP, PIPE_WIDTH + 4, 20);
+        ctx.fillRect(p.x, 0, PIPE_WIDTH, p.y); // Üst
+        ctx.fillRect(p.x - 2, p.y - 20, PIPE_WIDTH + 4, 20); // Üst Başlık
+        
+        ctx.fillRect(p.x, p.y + PIPE_GAP, PIPE_WIDTH, SCREEN_HEIGHT); // Alt
+        ctx.fillRect(p.x - 2, p.y + PIPE_GAP, PIPE_WIDTH + 4, 20); // Alt Başlık
     });
 
-    // 4. Zemin Şeridi
-    ctx.fillStyle = '#d35400';
+    // Zemin
+    ctx.fillStyle = '#d84315';
     ctx.fillRect(0, SCREEN_HEIGHT - 20, SCREEN_WIDTH, 20);
-    // Zemin Çimenleri
-    ctx.fillStyle = '#2ecc71';
+    ctx.fillStyle = '#4caf50';
     ctx.fillRect(0, SCREEN_HEIGHT - 25, SCREEN_WIDTH, 5);
 
-    // 5. Partiküller
-    particles.current.forEach(pt => {
+    // Kuş
+    if (gameStateRef.current !== 'GAMEOVER' || frames.current % 10 < 5) { // Yanınca yanıp sönme
         ctx.save();
-        ctx.globalAlpha = pt.life;
-        ctx.fillStyle = pt.color;
-        ctx.fillRect(pt.x, pt.y, pt.size, pt.size);
-        ctx.restore();
-    });
-
-    // 6. ETKA (Kuş)
-    if (gameState !== 'GAMEOVER' || particles.current.length > 0) {
-        ctx.save();
-        ctx.translate(bird.current.x + bird.current.width / 2, bird.current.y + bird.current.height / 2);
+        ctx.translate(bird.current.x + bird.current.width/2, bird.current.y + bird.current.height/2);
         ctx.rotate(bird.current.rotation);
         
-        // Gövde (Yuvarlak Kare)
-        ctx.fillStyle = bird.current.color;
-        // Basit bir gölge efekti
-        ctx.shadowColor = 'rgba(0,0,0,0.3)';
-        ctx.shadowBlur = 5;
-        ctx.fillRect(-bird.current.width / 2, -bird.current.height / 2, bird.current.width, bird.current.height);
-        ctx.shadowBlur = 0; // Gölgeyi kapat
-
-        // Göz (Beyaz + Siyah Bebek)
-        ctx.fillStyle = '#fff';
-        ctx.beginPath();
-        ctx.arc(8, -8, 8, 0, Math.PI * 2);
-        ctx.fill();
+        ctx.fillStyle = '#fdd835'; // Sarı gövde
+        ctx.fillRect(-bird.current.width/2, -bird.current.height/2, bird.current.width, bird.current.height);
         
-        ctx.fillStyle = '#000'; // Göz Bebeği
-        ctx.beginPath();
-        ctx.arc(10, -8, 3, 0, Math.PI * 2);
-        ctx.fill();
-
-        // Gaga
-        ctx.fillStyle = '#e67e22';
-        ctx.beginPath();
-        ctx.moveTo(10, 0);
-        ctx.lineTo(22, 5);
-        ctx.lineTo(10, 10);
-        ctx.fill();
-
-        // Kanat (Basit bir elips, animasyonlu)
-        ctx.fillStyle = '#f39c12';
-        const wingY = Math.sin(frames.current * 0.5) * 5;
-        ctx.beginPath();
-        ctx.ellipse(-5, 5 + wingY, 8, 5, 0, 0, Math.PI * 2);
-        ctx.fill();
-
+        ctx.fillStyle = '#fff'; // Göz
+        ctx.fillRect(6, -10, 10, 10);
+        ctx.fillStyle = '#000'; // Göz bebeği
+        ctx.fillRect(12, -8, 4, 4);
+        
+        ctx.fillStyle = '#f57c00'; // Gaga
+        ctx.fillRect(10, 2, 12, 8);
+        
         ctx.restore();
     }
-    
-    // 7. Flash Efekti
-    if (flash) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.fillRect(0, 0, SCREEN_WIDTH, SCREEN_HEIGHT);
-    }
+
+    // Partiküller
+    particles.current.forEach(pt => {
+        ctx.fillStyle = pt.color;
+        ctx.globalAlpha = pt.life;
+        ctx.fillRect(pt.x, pt.y, pt.size, pt.size);
+        ctx.globalAlpha = 1.0;
+    });
   };
 
-  // --- EVENT LISTENER (Klavye & Touch) ---
+  // --- KONTROLLER ---
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
+    const handler = (e: KeyboardEvent) => {
         if (e.code === 'Space' || e.code === 'ArrowUp') {
-            e.preventDefault(); // Scroll engelle
-            jump();
+            e.preventDefault();
+            if (gameStateRef.current === 'START' || gameStateRef.current === 'GAMEOVER') {
+                resetGame();
+            } else {
+                jump();
+            }
         }
     };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [jump]);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
 
   return (
     <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        justifyContent: 'center',
-        minHeight: '100vh',
-        backgroundColor: '#1a1a1a',
-        fontFamily: "'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-        touchAction: 'none' // Mobilde zoom/scroll engelleme
+        display: 'flex', 
+        justifyContent: 'center', 
+        alignItems: 'center', 
+        height: '100vh', 
+        backgroundColor: '#222',
+        fontFamily: 'sans-serif'
     }}>
-      <h1 style={{ 
-          color: '#f1c40f', 
-          marginBottom: '10px', 
-          textTransform: 'uppercase', 
-          letterSpacing: '3px',
-          textShadow: '0 4px 0 #d35400' 
-      }}>
-          Flappy Etka <span style={{fontSize:'0.6em', color:'#fff'}}>Ultimate</span>
-      </h1>
-      
-      <div style={{ 
-          position: 'relative', 
-          width: SCREEN_WIDTH + 'px', 
-          height: SCREEN_HEIGHT + 'px',
-          boxShadow: '0 20px 50px rgba(0,0,0,0.5)',
-          borderRadius: '12px',
-          overflow: 'hidden'
-      }}>
-        
-        {/* SKOR TABLOSU */}
-        <div style={{
-            position: 'absolute',
-            top: '20px',
-            width: '100%',
-            textAlign: 'center',
-            zIndex: 10,
-            pointerEvents: 'none'
-        }}>
-            <div style={{
-                fontSize: '56px',
-                fontWeight: '900',
-                color: 'white',
-                textShadow: '3px 3px 0 #000, -1px -1px 0 #000'
-            }}>{score}</div>
+        <div style={{ position: 'relative', width: SCREEN_WIDTH, height: SCREEN_HEIGHT, overflow: 'hidden', boxShadow: '0 0 50px rgba(0,0,0,0.5)', borderRadius: '10px' }}>
             
-            <div style={{
-                fontSize: '16px',
-                color: '#f1c40f',
-                background: 'rgba(0,0,0,0.5)',
-                display: 'inline-block',
-                padding: '4px 12px',
-                borderRadius: '20px',
-                marginTop: '5px'
-            }}>En Yüksek: {highScore}</div>
-        </div>
+            {/* OYUN ALANI */}
+            <canvas 
+                ref={canvasRef} 
+                width={SCREEN_WIDTH} 
+                height={SCREEN_HEIGHT}
+                onMouseDown={() => {
+                    if (gameStateRef.current === 'PLAYING') jump();
+                    else resetGame();
+                }}
+                style={{ display: 'block' }}
+            />
 
-        {/* OYUN ALANI */}
-        <canvas
-            ref={canvasRef}
-            width={SCREEN_WIDTH}
-            height={SCREEN_HEIGHT}
-            onClick={jump}
-            style={{ 
-                display: 'block', 
-                cursor: 'pointer',
-                imageRendering: 'pixelated' // Daha keskin çizimler
-            }}
-        />
-
-        {/* BAŞLANGIÇ EKRANI */}
-        {gameState === 'START' && (
-             <div style={overlayStyle}>
-                <div style={cardStyle}>
-                    <h2 style={{color: '#2ecc71', margin:0}}>Hazır mısın?</h2>
-                    <p style={{color: '#666', margin:'10px 0'}}>Başlamak için tıkla veya<br/>BOŞLUK tuşuna bas</p>
-                    <div style={{fontSize: '40px'}}>👆</div>
-                </div>
+            {/* SKOR */}
+            <div style={{ position: 'absolute', top: 20, width: '100%', textAlign: 'center', pointerEvents: 'none' }}>
+                <span style={{ fontSize: '50px', fontWeight: 'bold', color: 'white', textShadow: '2px 2px 0 #000' }}>{score}</span>
             </div>
-        )}
 
-        {/* GAME OVER EKRANI */}
-        {gameState === 'GAMEOVER' && (
-            <div style={overlayStyle}>
-                <div style={cardStyle}>
-                    <h2 style={{color: '#e74c3c', fontSize: '32px', margin:0}}>YANDIN!</h2>
-                    
-                    <div style={{margin: '20px 0'}}>
-                        <div style={{fontSize: '14px', color:'#999'}}>SKORUN</div>
-                        <div style={{fontSize: '48px', fontWeight:'bold', color:'#333'}}>{score}</div>
-                    </div>
-
-                    {score >= highScore && score > 0 && (
-                        <div style={{
-                            color: '#f39c12', 
-                            fontWeight:'bold', 
-                            marginBottom:'15px',
-                            animation: 'pulse 1s infinite'
-                        }}>✨ YENİ REKOR! ✨</div>
+            {/* MENÜLER */}
+            {(showMenu || isGameOver) && (
+                <div style={{
+                    position: 'absolute', top: 0, left: 0, width: '100%', height: '100%',
+                    backgroundColor: 'rgba(0,0,0,0.6)',
+                    display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+                    color: 'white'
+                }}>
+                    {isGameOver ? (
+                        <>
+                            <h1 style={{ color: '#ff5252', fontSize: '48px', margin: 0 }}>YANDIN!</h1>
+                            <p style={{ fontSize: '24px' }}>Skor: {score}</p>
+                            <p style={{ color: '#ffd600' }}>En Yüksek: {highScore}</p>
+                        </>
+                    ) : (
+                        <>
+                            <h1 style={{ color: '#ffd600', fontSize: '40px', margin: 0 }}>FLAPPY ETKA</h1>
+                            <p>Başlamak için tıkla</p>
+                        </>
                     )}
-
+                    
                     <button 
                         onClick={resetGame}
                         style={{
-                            background: '#2ecc71',
-                            color: 'white',
-                            border: 'none',
-                            padding: '12px 30px',
-                            fontSize: '18px',
-                            borderRadius: '8px',
-                            cursor: 'pointer',
-                            fontWeight: 'bold',
-                            boxShadow: '0 4px 0 #27ae60',
-                            transition: 'all 0.1s'
+                            marginTop: '20px', padding: '15px 40px', fontSize: '20px', fontWeight: 'bold',
+                            backgroundColor: '#4caf50', color: 'white', border: 'none', borderRadius: '30px',
+                            cursor: 'pointer', boxShadow: '0 4px 0 #2e7d32'
                         }}
                     >
-                        TEKRAR OYNA
+                        {isGameOver ? 'TEKRAR OYNA' : 'BAŞLA'}
                     </button>
                 </div>
-            </div>
-        )}
-      </div>
-
-      <div style={{marginTop: '20px', color: '#666', fontSize: '12px'}}>
-          v2.0 Ultimate Edition • Next.js + Canvas
-      </div>
+            )}
+        </div>
     </div>
   );
 }
-
-// --- CSS STYLES (Inline objects for simplicity) ---
-const overlayStyle: React.CSSProperties = {
-    position: 'absolute',
-    top: 0, left: 0, right: 0, bottom: 0,
-    backgroundColor: 'rgba(0,0,0,0.6)',
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 20,
-    backdropFilter: 'blur(2px)'
-};
-
-const cardStyle: React.CSSProperties = {
-    backgroundColor: 'white',
-    padding: '30px',
-    borderRadius: '16px',
-    textAlign: 'center',
-    boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
-    width: '80%',
-    maxWidth: '300px',
-    animation: 'popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275)'
-};
