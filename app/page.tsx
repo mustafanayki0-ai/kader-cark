@@ -2,14 +2,13 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
+import Link from "next/link"; // Link için gerekli
 
 /**
  * ==============================================================================
  * PROJE: KADER ÇARKI (DESTINY WHEEL)
- * GELİŞTİRİCİ: MUSTAFA SİRAC NAYKİ (WATERMARK ENTEGRASYONLU)
- * AÇIKLAMA: Bu proje, Supabase veritabanı kullanarak gerçek zamanlı
- * bir karar mekanizması sunar. Sağ ve Sol seçenekleri arasında
- * rastgele seçim yapar ve sonucu veritabanına kaydeder.
+ * GELİŞTİRİCİ: MUSTAFA SİRAC NAYKİ
+ * AÇIKLAMA: Supabase destekli karar çarkı + Flappy Etka Butonu Eklendi
  * ==============================================================================
  */
 
@@ -22,7 +21,7 @@ const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZ
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // ------------------------------------------------------------------------------
-// 2. TİP TANIMLAMALARI (TYPESCRIPT INTERFACES)
+// 2. TİP TANIMLAMALARI
 // ------------------------------------------------------------------------------
 interface Decision {
   id: number;
@@ -38,7 +37,7 @@ interface Stats {
 }
 
 // ------------------------------------------------------------------------------
-// 3. IKON KOMPONENTLERİ (SVG)
+// 3. IKON KOMPONENTLERİ
 // ------------------------------------------------------------------------------
 const UserIcon = () => (
   <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -65,10 +64,9 @@ const RightArrowIcon = () => (
 );
 
 // ------------------------------------------------------------------------------
-// 4. ARKA PLAN WATERMARK KOMPONENTİ
+// 4. ARKA PLAN WATERMARK
 // ------------------------------------------------------------------------------
 const WatermarkBackground = () => {
-  // Ekranda tekrar eden bir isim deseni oluşturur
   const rows = Array.from({ length: 20 }); 
   const cols = Array.from({ length: 10 });
 
@@ -91,31 +89,24 @@ const WatermarkBackground = () => {
 // 5. ANA SAYFA KOMPONENTİ
 // ------------------------------------------------------------------------------
 export default function DecisionWheelPage() {
-  // State Yönetimi
   const [userName, setUserName] = useState("");
   const [history, setHistory] = useState<Decision[]>([]);
   const [isSpinning, setIsSpinning] = useState(false);
   const [rotation, setRotation] = useState(0);
-  const [showModal, setShowModal] = useState(false); // Sonuç modalı
+  const [showModal, setShowModal] = useState(false);
   const [lastResult, setLastResult] = useState<Decision | null>(null);
   const [stats, setStats] = useState<Stats>({ leftCount: 0, rightCount: 0, total: 0 });
 
-  // Referanslar (Input focus vb. için)
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // ----------------------------------------------------------------------------
-  // VERİ ÇEKME & GÜNCELLEME MANTIĞI
-  // ----------------------------------------------------------------------------
+  // Veri Çekme
   useEffect(() => {
     fetchHistoryAndStats();
-    
-    // Gerçek zamanlı hissi vermek için polling (her 2 saniyede bir güncelle)
     const intervalId = setInterval(fetchHistoryAndStats, 2000);
     return () => clearInterval(intervalId);
   }, []);
 
   const fetchHistoryAndStats = async () => {
-    // 1. Geçmişi Çek
     const { data: historyData } = await supabase
       .from("decisions")
       .select("*")
@@ -124,11 +115,6 @@ export default function DecisionWheelPage() {
 
     if (historyData) {
       setHistory(historyData as Decision[]);
-    }
-
-    // 2. İstatistikleri Hesapla (Tüm tablodan değil, son 100 kayıttan analiz yapalım performans için)
-    // Gerçek projede bunun için ayrı bir RPC fonksiyonu yazılır ama şimdilik client-side yeterli.
-    if (historyData) {
       const left = historyData.filter(d => d.result === "SOL").length;
       const right = historyData.filter(d => d.result === "SAĞ").length;
       setStats({
@@ -139,11 +125,8 @@ export default function DecisionWheelPage() {
     }
   };
 
-  // ----------------------------------------------------------------------------
-  // ÇARK ÇEVİRME ALGORİTMASI
-  // ----------------------------------------------------------------------------
+  // Çark Döndürme
   const handleSpin = async () => {
-    // Validasyonlar
     if (!userName.trim()) {
       alert("Lütfen bir isim girin! Çarkı çevirmek için kimliğinizi bilmeliyiz.");
       inputRef.current?.focus();
@@ -151,48 +134,27 @@ export default function DecisionWheelPage() {
     }
     if (isSpinning) return;
 
-    // Başlangıç Durumu
     setIsSpinning(true);
     setShowModal(false);
 
-    // 1. SONUCU ÖNCEDEN BELİRLE
-    // %50 şans ile Sağ veya Sol
     const isLeftWin = Math.random() < 0.5;
     const resultText: "SOL" | "SAĞ" = isLeftWin ? "SOL" : "SAĞ";
 
-    // 2. DÖNÜŞ AÇISINI HESAPLA
-    // Çark mantığı: 
-    // - Ok (Arrow) en üstte (0 derece) sabit.
-    // - Çark CSS ile "conic-gradient" boyalı.
-    // - Mavi (Sağ) : 0deg - 180deg
-    // - Kırmızı (Sol): 180deg - 360deg
-    //
-    // Eğer SOL gelecekse, okun altına Kırmızı bölüm gelmeli.
-    // Eğer SAĞ gelecekse, okun altına Mavi bölüm gelmeli.
-    
-    const minSpins = 5; // En az 5 tam tur atsın
+    const minSpins = 5;
     const baseDegrees = 360 * minSpins;
     
     let targetDegree = 0;
-    const randomOffset = Math.floor(Math.random() * 140) + 20; // Tam sınıra gelmemesi için güvenli aralık
+    const randomOffset = Math.floor(Math.random() * 140) + 20;
 
     if (isLeftWin) {
-      // Solun (Kırmızının) gelmesi için çarkın 180-360 derecelik kısmının üste gelmesi lazım.
-      // Çark saat yönünde döneceği için (negatif rotate veya pozitif), 
-      // hedef açıyı ona göre ayarlıyoruz.
-      // Basit mantık: Sol 180 dereceden başlar. 
       targetDegree = baseDegrees + 180 + randomOffset;
     } else {
-      // Sağ (Mavi) 0-180 arasıdır.
       targetDegree = baseDegrees + randomOffset;
     }
 
-    // Mevcut rotasyonun üzerine ekleyerek yumuşak dönüş sağla
     setRotation((prev) => prev + targetDegree);
 
-    // 3. ANİMASYON BİTİŞİ VE KAYIT (4 saniye sonra)
     setTimeout(async () => {
-      // Veritabanına kaydet
       const { data, error } = await supabase
         .from("decisions")
         .insert([{ user_name: userName, result: resultText }])
@@ -201,29 +163,22 @@ export default function DecisionWheelPage() {
 
       if (!error && data) {
         setLastResult(data as Decision);
-        setShowModal(true); // Modalı aç
+        setShowModal(true);
       }
 
       setIsSpinning(false);
-      fetchHistoryAndStats(); // Listeyi hemen güncelle
-    }, 4000); // CSS transition süresiyle aynı olmalı
+      fetchHistoryAndStats();
+    }, 4000);
   };
 
-  // ----------------------------------------------------------------------------
-  // JSX RENDER ALANI
-  // ----------------------------------------------------------------------------
   return (
     <main className="relative min-h-screen bg-[#09090b] text-slate-200 font-sans overflow-hidden flex flex-col md:flex-row">
       
-      {/* Özel Arka Plan Deseni */}
       <WatermarkBackground />
 
-      {/* ======================================================================
-          SOL BÖLÜM: ÇARK VE KULLANICI GİRİŞİ
-      ====================================================================== */}
+      {/* --- SOL BÖLÜM: ÇARK --- */}
       <section className="relative z-10 flex-1 flex flex-col items-center justify-center p-6 border-b md:border-b-0 md:border-r border-slate-800 bg-[#09090b]/80 backdrop-blur-sm">
         
-        {/* Logo / Başlık */}
         <div className="mb-10 text-center">
           <h1 className="text-5xl md:text-6xl font-black tracking-tighter bg-gradient-to-r from-blue-500 via-purple-500 to-red-500 bg-clip-text text-transparent drop-shadow-2xl">
             KADER ÇARKI
@@ -233,7 +188,6 @@ export default function DecisionWheelPage() {
           </p>
         </div>
 
-        {/* Kullanıcı Giriş Inputu */}
         <div className="w-full max-w-sm mb-10 relative group">
           <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
             <UserIcon />
@@ -249,41 +203,31 @@ export default function DecisionWheelPage() {
           />
         </div>
 
-        {/* ÇARK MEKANİZMASI */}
+        {/* Çark Mekanizması */}
         <div className="relative mb-8 group">
-          
-          {/* Çarkın Dış Çerçevesi (Glow Effect) */}
           <div className="absolute inset-0 rounded-full bg-gradient-to-r from-blue-600 to-red-600 blur-2xl opacity-20 group-hover:opacity-40 transition-opacity duration-500"></div>
 
-          {/* Çark Göstergesi (Ok İşareti) */}
           <div className="absolute -top-6 left-1/2 -translate-x-1/2 z-30 drop-shadow-xl">
              <div className="w-8 h-10 bg-white clip-path-polygon"></div>
-             {/* Üçgen şekli CSS ile de yapılabilir ama basit bir div yeterli */}
              <div className="w-0 h-0 border-l-[20px] border-l-transparent border-r-[20px] border-r-transparent border-t-[40px] border-t-white"></div>
           </div>
 
-          {/* Dönen Çark */}
           <div 
             className="relative w-[320px] h-[320px] md:w-[450px] md:h-[450px] rounded-full overflow-hidden border-8 border-slate-800 shadow-2xl z-20"
             style={{
-              transform: `rotate(-${rotation}deg)`, // Eksi değer saat yönünde dönüş sağlar
+              transform: `rotate(-${rotation}deg)`,
               transition: isSpinning ? "transform 4s cubic-bezier(0.1, 0, 0.2, 1)" : "none",
             }}
           >
-            {/* CSS Conic Gradient ile İki Parçalı Renk */}
             <div className="w-full h-full" style={{ background: "conic-gradient(#3b82f6 0% 50%, #ef4444 50% 100%)" }}>
-              {/* Çark Üzerindeki Yazılar */}
               <div className="absolute w-full h-full flex flex-col justify-between items-center py-12 pointer-events-none">
                 <span className="text-4xl font-black text-white drop-shadow-lg tracking-widest rotate-180 opacity-90">SOL</span>
                 <span className="text-4xl font-black text-white drop-shadow-lg tracking-widest opacity-90">SAĞ</span>
               </div>
-              
-              {/* Dekoratif Çizgi (Ortadan Bölen) */}
               <div className="absolute top-1/2 left-0 w-full h-2 bg-slate-800/20 -translate-y-1/2"></div>
             </div>
           </div>
 
-          {/* Ortadaki Başlat Butonu */}
           <button
             onClick={handleSpin}
             disabled={isSpinning || !userName}
@@ -296,22 +240,13 @@ export default function DecisionWheelPage() {
               }
             `}
           >
-            {isSpinning ? (
-              <span className="animate-spin text-3xl">Wait</span>
-            ) : (
-              "ÇEVİR"
-            )}
+            {isSpinning ? <span className="animate-spin text-3xl">Wait</span> : "ÇEVİR"}
           </button>
         </div>
-
       </section>
 
-      {/* ======================================================================
-          SAĞ BÖLÜM: CANLI LİSTE VE İSTATİSTİKLER
-      ====================================================================== */}
+      {/* --- SAĞ BÖLÜM: LİSTE --- */}
       <section className="relative z-10 w-full md:w-[400px] bg-[#0c0c0e]/95 border-l border-slate-800 flex flex-col h-[50vh] md:h-screen shadow-2xl">
-        
-        {/* Üst Başlık */}
         <div className="p-6 border-b border-slate-800 bg-slate-900/50">
           <h2 className="flex items-center gap-2 text-xl font-bold text-white">
             <HistoryIcon />
@@ -320,7 +255,6 @@ export default function DecisionWheelPage() {
           <p className="text-xs text-slate-500 mt-1">Sonuçlar anlık olarak güncellenir.</p>
         </div>
 
-        {/* İstatistik Barı */}
         <div className="px-6 py-4 border-b border-slate-800">
           <div className="flex justify-between text-xs font-bold mb-2 uppercase tracking-wider">
             <span className="text-red-500 flex items-center"><LeftArrowIcon /> Sol (%{stats.total > 0 ? Math.round((stats.leftCount / stats.total) * 100) : 0})</span>
@@ -338,7 +272,6 @@ export default function DecisionWheelPage() {
           </div>
         </div>
 
-        {/* Kaydırılabilir Liste */}
         <div className="flex-1 overflow-y-auto p-4 space-y-3 custom-scrollbar">
           {history.length === 0 ? (
             <div className="text-center py-10 opacity-50">
@@ -372,8 +305,7 @@ export default function DecisionWheelPage() {
             ))
           )}
         </div>
-
-        {/* Alt Bilgi */}
+        
         <div className="p-4 border-t border-slate-800 text-center">
           <p className="text-[10px] text-slate-600 font-mono">
             Powered by Supabase & Mustafa Sirac Nayki
@@ -381,27 +313,31 @@ export default function DecisionWheelPage() {
         </div>
       </section>
 
-      {/* ======================================================================
-          SONUÇ MODALI (POPUP)
-      ====================================================================== */}
+      {/* --- OYUN BUTONU (YENİ EKLENDİ) --- */}
+      <div className="fixed bottom-5 right-5 z-50 animate-bounce">
+        <Link 
+          href="/flappy-etka" 
+          className="flex items-center gap-2 bg-yellow-400 hover:bg-yellow-300 text-black font-black py-3 px-6 rounded-full shadow-xl border-4 border-black transition-transform hover:scale-110"
+        >
+          <span className="text-xl">🐦</span>
+          <span>OYNA</span>
+        </Link>
+      </div>
+
+      {/* --- MODAL --- */}
       {showModal && lastResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-[#18181b] border-2 border-slate-700 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center relative overflow-hidden animate-in zoom-in-95 duration-300">
-            
-            {/* Modal Arkaplan Efekti */}
             <div className={`absolute inset-0 opacity-20 ${lastResult.result === "SAĞ" ? "bg-blue-600" : "bg-red-600"}`}></div>
-            
             <div className="relative z-10">
               <h3 className="text-xl text-slate-400 font-medium mb-2">Kaderin Kararı:</h3>
               <div className={`text-6xl font-black mb-6 ${lastResult.result === "SAĞ" ? "text-blue-500 drop-shadow-[0_0_15px_rgba(59,130,246,0.5)]" : "text-red-500 drop-shadow-[0_0_15px_rgba(239,68,68,0.5)]"}`}>
                 {lastResult.result}
               </div>
-              
               <p className="text-slate-300 mb-6">
                 Sayın <span className="text-white font-bold">{lastResult.user_name}</span>,<br/>
                 seçimin veritabanına işlendi.
               </p>
-              
               <button 
                 onClick={() => setShowModal(false)}
                 className="w-full bg-white text-black font-bold py-3 rounded-xl hover:bg-slate-200 transition"
