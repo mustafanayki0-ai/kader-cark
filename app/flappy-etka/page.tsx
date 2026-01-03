@@ -4,14 +4,14 @@ import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
 // ==========================================
-// OYUN AYARLARI VE SABİTLERİ
+// OYUN AYARLARI
 // ==========================================
 const CANVAS_WIDTH = 400;
 const CANVAS_HEIGHT = 600;
 const GRAVITY = 0.25;
 const JUMP_STRENGTH = -4.5;
 const PIPE_SPEED = 2;
-const PIPE_SPAWN_RATE = 120; // Kare sayısı (Frame)
+const PIPE_SPAWN_RATE = 120;
 const PIPE_GAP = 150; 
 const BIRD_SIZE = 24;
 const PIPE_WIDTH = 52;
@@ -23,7 +23,6 @@ export default function FlappyEtkaPage() {
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
 
-  // Kuşun konumu ve hızı (Ref ile performans optimizasyonu)
   const birdY = useRef(CANVAS_HEIGHT / 2);
   const birdVelocity = useRef(0);
   
@@ -31,10 +30,7 @@ export default function FlappyEtkaPage() {
   const frameCount = useRef(0);
   const gameRunning = useRef(false);
 
-  // ==========================================
-  // OYUN FONKSİYONLARI
-  // ==========================================
-
+  // --- OYUN FONKSİYONLARI ---
   const startGame = () => {
     if (gameRunning.current) return;
     
@@ -65,9 +61,7 @@ export default function FlappyEtkaPage() {
     }
   };
 
-  // ==========================================
-  // OYUN DÖNGÜSÜ (GAME LOOP)
-  // ==========================================
+  // --- OYUN DÖNGÜSÜ ---
   const gameLoop = () => {
     const canvas = canvasRef.current;
     const ctx = canvas?.getContext("2d");
@@ -75,35 +69,26 @@ export default function FlappyEtkaPage() {
 
     frameCount.current++;
 
-    // --- FİZİK HESAPLAMALARI ---
-    
-    // Yerçekimi
+    // Fizik
     birdVelocity.current += GRAVITY;
     birdY.current += birdVelocity.current;
 
-    // Zemin ve Tavan Kontrolü
     if (birdY.current + BIRD_SIZE / 2 >= CANVAS_HEIGHT || birdY.current - BIRD_SIZE / 2 <= 0) {
       gameOver();
       return;
     }
 
-    // Boru Ekleme
     if (frameCount.current % PIPE_SPAWN_RATE === 0) {
       const minTop = 50;
       const maxTop = CANVAS_HEIGHT - PIPE_GAP - 50;
       const randHeight = Math.floor(Math.random() * (maxTop - minTop + 1) + minTop);
-      
       pipes.current.push({ x: CANVAS_WIDTH, topHeight: randHeight, passed: false });
     }
 
-    // Boru Hareketi ve Çarpışma
     pipes.current.forEach((pipe, index) => {
       pipe.x -= PIPE_SPEED;
-
-      // Ekrandan çıkanı sil
       if (pipe.x + PIPE_WIDTH < 0) pipes.current.splice(index, 1);
 
-      // Hitbox (Çarpışma Kutusu)
       const bLeft = 50 - BIRD_SIZE / 2;
       const bRight = 50 + BIRD_SIZE / 2;
       const bTop = birdY.current - BIRD_SIZE / 2;
@@ -114,7 +99,6 @@ export default function FlappyEtkaPage() {
       const topLimit = pipe.topHeight;
       const bottomLimit = pipe.topHeight + PIPE_GAP;
 
-      // Çarpışma var mı?
       if (bRight > pLeft && bLeft < pRight) {
         if (bTop < topLimit || bBottom > bottomLimit) {
           gameOver();
@@ -122,59 +106,44 @@ export default function FlappyEtkaPage() {
         }
       }
 
-      // Skor
       if (!pipe.passed && bLeft > pRight) {
         setScore(prev => prev + 1);
         pipe.passed = true;
       }
     });
 
-    // --- ÇİZİM İŞLEMLERİ ---
-
-    // Temizle
+    // Çizim
     ctx.clearRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Arka Plan
     const grad = ctx.createLinearGradient(0, 0, 0, CANVAS_HEIGHT);
     grad.addColorStop(0, "#4ade80"); 
     grad.addColorStop(1, "#60a5fa");
     ctx.fillStyle = grad;
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
 
-    // Borular
     ctx.fillStyle = "#166534";
     ctx.strokeStyle = "#14532d";
     ctx.lineWidth = 2;
-    
     pipes.current.forEach(pipe => {
-        // Üst
         ctx.fillRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
         ctx.strokeRect(pipe.x, 0, PIPE_WIDTH, pipe.topHeight);
-        // Alt
         ctx.fillRect(pipe.x, pipe.topHeight + PIPE_GAP, PIPE_WIDTH, CANVAS_HEIGHT - (pipe.topHeight + PIPE_GAP));
         ctx.strokeRect(pipe.x, pipe.topHeight + PIPE_GAP, PIPE_WIDTH, CANVAS_HEIGHT - (pipe.topHeight + PIPE_GAP));
     });
 
-    // Etka Kuşu (Kare şeklinde)
     ctx.save();
     ctx.translate(50, birdY.current);
     const rot = Math.min(Math.max(birdVelocity.current * 0.1, -0.5), 0.5);
     ctx.rotate(rot);
-
-    ctx.fillStyle = "#fbbf24"; // Sarı
+    ctx.fillStyle = "#fbbf24"; 
     ctx.fillRect(-BIRD_SIZE / 2, -BIRD_SIZE / 2, BIRD_SIZE, BIRD_SIZE);
-    
     ctx.strokeStyle = "#b45309";
     ctx.strokeRect(-BIRD_SIZE / 2, -BIRD_SIZE / 2, BIRD_SIZE, BIRD_SIZE);
-    
-    // Göz ve Gaga
     ctx.fillStyle = "white"; ctx.fillRect(4, -6, 8, 8);
     ctx.fillStyle = "black"; ctx.fillRect(8, -4, 4, 4);
     ctx.fillStyle = "#ea580c"; ctx.fillRect(BIRD_SIZE/2 - 2, 0, 8, 6);
-
     ctx.restore();
 
-    // Skor Yazısı
     ctx.fillStyle = "white";
     ctx.font = "bold 40px sans-serif";
     ctx.strokeStyle = "black";
@@ -187,7 +156,6 @@ export default function FlappyEtkaPage() {
     }
   };
 
-  // --- KONTROLLER ---
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.code === "Space") {
@@ -201,7 +169,6 @@ export default function FlappyEtkaPage() {
     };
 
     window.addEventListener("keydown", handleKeyDown);
-    // Mouse ve Touch olaylarını canvas'a bağla
     if(canvasRef.current) {
         canvasRef.current.addEventListener("mousedown", handleTouch as any);
         canvasRef.current.addEventListener("touchstart", handleTouch as any, { passive: false });
@@ -217,7 +184,6 @@ export default function FlappyEtkaPage() {
     };
   }, [isGameOver]);
 
-  // İlk Ekran Çizimi
   useEffect(() => {
     if (!gameRunning.current && !isGameOver) {
         const ctx = canvasRef.current?.getContext("2d");

@@ -2,27 +2,22 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createClient } from "@supabase/supabase-js";
-import Link from "next/link"; // Link için gerekli
+import Link from "next/link"; 
 
 /**
  * ==============================================================================
  * PROJE: KADER ÇARKI (DESTINY WHEEL)
- * GELİŞTİRİCİ: MUSTAFA SİRAC NAYKİ
- * AÇIKLAMA: Supabase destekli karar çarkı + Flappy Etka Butonu Eklendi
+ * AÇIKLAMA: Ana Sayfa - Çark, Liste ve Flappy Etka Butonu
  * ==============================================================================
  */
 
-// ------------------------------------------------------------------------------
 // 1. SUPABASE AYARLARI
-// ------------------------------------------------------------------------------
 const SUPABASE_URL = "https://wqmkqyehfxxurxhblagu.supabase.co";
 const SUPABASE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6IndxbWtxeWVoZnh4dXJ4aGJsYWd1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Njc0NTQwNjksImV4cCI6MjA4MzAzMDA2OX0.VbEAKjzVBNUZ8f9OJz-p13rQ48J1Yb_CZ6HXGwsjg3I";
 
 const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
 
-// ------------------------------------------------------------------------------
 // 2. TİP TANIMLAMALARI
-// ------------------------------------------------------------------------------
 interface Decision {
   id: number;
   user_name: string;
@@ -36,36 +31,29 @@ interface Stats {
   total: number;
 }
 
-// ------------------------------------------------------------------------------
-// 3. IKON KOMPONENTLERİ
-// ------------------------------------------------------------------------------
+// 3. IKONLAR
 const UserIcon = () => (
   <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
   </svg>
 );
-
 const HistoryIcon = () => (
   <svg className="w-5 h-5 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
   </svg>
 );
-
 const LeftArrowIcon = () => (
   <svg className="w-4 h-4 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
   </svg>
 );
-
 const RightArrowIcon = () => (
   <svg className="w-4 h-4 ml-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14 5l7 7m0 0l-7 7m7-7H3" />
   </svg>
 );
 
-// ------------------------------------------------------------------------------
 // 4. ARKA PLAN WATERMARK
-// ------------------------------------------------------------------------------
 const WatermarkBackground = () => {
   const rows = Array.from({ length: 20 }); 
   const cols = Array.from({ length: 10 });
@@ -85,9 +73,7 @@ const WatermarkBackground = () => {
   );
 };
 
-// ------------------------------------------------------------------------------
-// 5. ANA SAYFA KOMPONENTİ
-// ------------------------------------------------------------------------------
+// 5. ANA KOMPONENT
 export default function DecisionWheelPage() {
   const [userName, setUserName] = useState("");
   const [history, setHistory] = useState<Decision[]>([]);
@@ -99,7 +85,6 @@ export default function DecisionWheelPage() {
 
   const inputRef = useRef<HTMLInputElement>(null);
 
-  // Veri Çekme
   useEffect(() => {
     fetchHistoryAndStats();
     const intervalId = setInterval(fetchHistoryAndStats, 2000);
@@ -125,7 +110,6 @@ export default function DecisionWheelPage() {
     }
   };
 
-  // Çark Döndürme
   const handleSpin = async () => {
     if (!userName.trim()) {
       alert("Lütfen bir isim girin! Çarkı çevirmek için kimliğinizi bilmeliyiz.");
@@ -313,7 +297,7 @@ export default function DecisionWheelPage() {
         </div>
       </section>
 
-      {/* --- OYUN BUTONU (YENİ EKLENDİ) --- */}
+      {/* --- OYUN BUTONU BURADA --- */}
       <div className="fixed bottom-5 right-5 z-50 animate-bounce">
         <Link 
           href="/flappy-etka" 
@@ -324,7 +308,7 @@ export default function DecisionWheelPage() {
         </Link>
       </div>
 
-      {/* --- MODAL --- */}
+      {/* --- SONUÇ MODALI --- */}
       {showModal && lastResult && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-300">
           <div className="bg-[#18181b] border-2 border-slate-700 p-8 rounded-2xl shadow-2xl max-w-sm w-full text-center relative overflow-hidden animate-in zoom-in-95 duration-300">
