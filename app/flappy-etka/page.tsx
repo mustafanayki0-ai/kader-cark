@@ -18,7 +18,10 @@ const PIPE_WIDTH = 52;
 
 export default function FlappyEtkaPage() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const requestRef = useRef<number>();
+  
+  // HATA BURADAYDI, (0) EKLENEREK DÜZELTİLDİ:
+  const requestRef = useRef<number>(0); 
+
   const [isGameOver, setIsGameOver] = useState(false);
   const [score, setScore] = useState(0);
   const [highScore, setHighScore] = useState(0);
